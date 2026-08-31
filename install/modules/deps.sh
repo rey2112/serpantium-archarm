@@ -145,9 +145,11 @@ pacman_retry() {
         fi
 
         if [ "$attempt" -ge "$max_attempts" ]; then
-            echo -e "\n\e[31m[ FAILED ]\e[0m pacman failed $max_attempts times: pacman $*" >&2
-            echo -e "\e[33m  The mirror kept dropping the connection. Pick a closer or" >&2
-            echo -e "  healthier mirror in /etc/pacman.d/mirrorlist, then re-run.\e[0m" >&2
+            if [ "${PACMAN_RETRY_QUIET:-false}" != true ]; then
+                echo -e "\n\e[31m[ FAILED ]\e[0m pacman failed $max_attempts times: pacman $*" >&2
+                echo -e "\e[33m  The mirror kept dropping the connection. Pick a closer or" >&2
+                echo -e "  healthier mirror in /etc/pacman.d/mirrorlist, then re-run.\e[0m" >&2
+            fi
             return 1
         fi
 
@@ -195,7 +197,11 @@ install_pkg() {
     local safe_jobs="$2"
 
     if pacman -Si "$pkg" &>/dev/null; then
-        sudo pacman -S --noconfirm --needed "$pkg"
+        # The package exists in a repo, so a failure here is usually the mirror
+        # dropping the download rather than anything wrong with the package.
+        # Retry before writing it off into FAILED_PKGS. The caller prints its
+        # own [ FAILED ] line, so keep pacman_retry's advice quiet.
+        PACMAN_RETRY_QUIET=true pacman_retry -S --noconfirm --needed "$pkg"
     elif command -v yay &>/dev/null; then
         env CARGO_BUILD_JOBS="$safe_jobs" MAKEFLAGS="-j$safe_jobs" yay -S --noconfirm --needed "$pkg"
     elif command -v paru &>/dev/null; then
