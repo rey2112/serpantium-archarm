@@ -104,19 +104,73 @@ enable_multilib() {
     fi
 }
 
+# Is an installer dependency already present?
+#
+# Several entries are package names with no command of the same name --
+# pciutils ships lspci, fontconfig ships fc-cache, and base-devel is a meta
+# package that ships nothing. A plain `command -v` reports those missing
+# forever, which dragged them into a pacman transaction on every run and made
+# each run depend on the mirror being reachable.
+installer_dep_present() {
+    local pkg="$1"
+
+    case "$pkg" in
+        pciutils)   command -v lspci    &>/dev/null && return 0 ;;
+        fontconfig) command -v fc-cache &>/dev/null && return 0 ;;
+        base-devel) ;;
+        *)          command -v "$pkg"   &>/dev/null && return 0 ;;
+    esac
+
+    # Fall back to asking pacman. base-devel is a meta package on current Arch
+    # and Arch Linux ARM, but is still a group on some derivatives.
+    pacman -Qq "$pkg" &>/dev/null && return 0
+    pacman -Qg "$pkg" &>/dev/null && return 0
+
+    return 1
+}
+
+# Run a pacman transaction, retrying transient mirror failures.
+#
+# The Arch Linux ARM mirrors reset connections mid-download often enough that a
+# single reset would otherwise abort the whole install: pacman exits non-zero,
+# set -e fires, and the trap clears the screen before the user can read why.
+pacman_retry() {
+    local attempt=1
+    local max_attempts=3
+    local delay
+
+    while true; do
+        if sudo pacman "$@"; then
+            return 0
+        fi
+
+        if [ "$attempt" -ge "$max_attempts" ]; then
+            echo -e "\n\e[31m[ FAILED ]\e[0m pacman failed $max_attempts times: pacman $*" >&2
+            echo -e "\e[33m  The mirror kept dropping the connection. Pick a closer or" >&2
+            echo -e "  healthier mirror in /etc/pacman.d/mirrorlist, then re-run.\e[0m" >&2
+            return 1
+        fi
+
+        delay=$(( attempt * 5 ))
+        echo -e "\n\e[33m[ RETRY ]\e[0m pacman attempt $attempt/$max_attempts failed; retrying in ${delay}s...\e[0m" >&2
+        sleep "$delay"
+        attempt=$(( attempt + 1 ))
+    done
+}
+
 bootstrap_installer_deps() {
     suppress_tty_sleep
     enable_multilib
 
     local missing=()
     for tool in fzf jq curl git pciutils unzip fontconfig base-devel; do
-        if ! command -v "$tool" &>/dev/null; then
+        if ! installer_dep_present "$tool"; then
             missing+=("$tool")
         fi
     done
 
     if [ ${#missing[@]} -gt 0 ]; then
-        sudo pacman -Sy --noconfirm --needed "${missing[@]}"
+        pacman_retry -Sy --noconfirm --needed "${missing[@]}"
     fi
 
     if ! command -v yay &>/dev/null && ! command -v paru &>/dev/null; then
@@ -197,7 +251,7 @@ install_dependencies() {
     fi
 
     echo -e "\n\e[36m[ INFO ]\e[0m $(t "installer.deps.syncing")"
-    sudo pacman -Syyu --noconfirm
+    pacman_retry -Syyu --noconfirm
 
     local missing_raw
     missing_raw=$(pacman -T "${target_list[@]}" 2>/dev/null || true)
