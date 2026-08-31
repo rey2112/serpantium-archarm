@@ -34,7 +34,7 @@ render_wallpaper_progress() {
 get_wallpaper_dir() {
     local user_pics=""
     if [ -f "$HOME/.config/user-dirs.dirs" ]; then
-        user_pics=$(grep '^XDG_PICTURES_DIR' "$HOME/.config/user-dirs.dirs" 2>/dev/null | cut -d= -f2 | tr -d '"' | sed "s|\$HOME|$HOME|g")
+        user_pics=$(grep '^XDG_PICTURES_DIR' "$HOME/.config/user-dirs.dirs" 2>/dev/null | cut -d= -f2 | tr -d '"' | sed "s|\$HOME|$HOME|g" || true)
     fi
     if [[ -z "$user_pics" || "$user_pics" == "$HOME" ]]; then
         if command -v xdg-user-dir &>/dev/null; then

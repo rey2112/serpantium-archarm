@@ -22,14 +22,18 @@ OPT_SDDM=true
 REPLACE_DM=false
 SDDM_WAYLAND=false
 
+if ! declare -F detect_gpu_info &>/dev/null; then
+    source "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/hwdetect.sh"
+fi
+
 USER_NAME="${USER:-$(whoami)}"
-OS_NAME=$(grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
+OS_NAME=$(grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"' || true)
 [[ -z "$OS_NAME" ]] && OS_NAME="$(t "installer.os.default_os")"
-CPU_INFO=$(grep -m 1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs)
+
+CPU_INFO=$(detect_cpu_info)
 [[ -z "$CPU_INFO" ]] && CPU_INFO="$(t "installer.os.unknown_cpu")"
 
-GPU_RAW=$(lspci -nn 2>/dev/null | grep -iE 'vga|3d|display')
-GPU_INFO=$(echo "$GPU_RAW" | cut -d: -f3 | sed -E 's/ \(rev [0-9a-f]+\)//g' | xargs)
+GPU_INFO=$(detect_gpu_info)
 [[ -z "$GPU_INFO" ]] && GPU_INFO="$(t "installer.os.unknown_gpu")"
 
 cleanup_terminal() {

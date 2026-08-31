@@ -28,7 +28,7 @@ format_uuid() {
 get_telemetry_id() {
     if [ -f "$VERSION_FILE" ]; then
         local id
-        id=$(awk -F= '/^TELEMETRY_ID=/{gsub(/"/, "", $2); print $2}' "$VERSION_FILE")
+        id=$(awk -F= '/^TELEMETRY_ID=/{gsub(/"/, "", $2); print $2}' "$VERSION_FILE" || true)
         if [ -n "$id" ]; then
             format_uuid "$id"
             return
@@ -86,7 +86,7 @@ get_installed_version() {
 
 get_installed_commit() {
     if [ -f "$VERSION_FILE" ]; then
-        awk -F= '/^SERPANTINUM_COMMIT=/{gsub(/"/, "", $2); print $2}' "$VERSION_FILE"
+        awk -F= '/^SERPANTINUM_COMMIT=/{gsub(/"/, "", $2); print $2}' "$VERSION_FILE" || true
     fi
 }
 
@@ -96,12 +96,12 @@ get_target_version() {
     local target_ver=""
 
     if [ -f "$repo_root/version.txt" ]; then
-        target_ver=$(cat "$repo_root/version.txt" 2>/dev/null | xargs)
+        target_ver=$(cat "$repo_root/version.txt" 2>/dev/null | xargs || true)
     fi
 
     if [[ -z "$target_ver" || "$target_ver" == "null" ]]; then
         if command -v curl &>/dev/null; then
-            target_ver=$(curl -s "https://raw.githubusercontent.com/${repo_slug}/HEAD/version.txt" 2>/dev/null | xargs)
+            target_ver=$(curl -s "https://raw.githubusercontent.com/${repo_slug}/HEAD/version.txt" 2>/dev/null | xargs || true)
         fi
     fi
 
@@ -123,7 +123,7 @@ get_target_commit() {
 
     if [[ -z "$target_commit" || "$target_commit" == "null" ]]; then
         if command -v curl &>/dev/null && command -v jq &>/dev/null; then
-            target_commit=$(curl -s "https://api.github.com/repos/${repo_slug}/commits/HEAD" 2>/dev/null | jq -r '.sha[:7] // empty')
+            target_commit=$(curl -s "https://api.github.com/repos/${repo_slug}/commits/HEAD" 2>/dev/null | jq -r '.sha[:7] // empty' || true)
         fi
     fi
 

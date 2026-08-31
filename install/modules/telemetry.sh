@@ -2,6 +2,10 @@
 
 WORKER_URL="https://dots-telemetry.ilyamiro-work.workers.dev"
 
+if ! declare -F detect_gpu_info &>/dev/null; then
+    source "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/hwdetect.sh" 2>/dev/null || true
+fi
+
 MODE=""
 VERSION=""
 OLD_VERSION=""
@@ -54,7 +58,7 @@ fi
 TELEMETRY_ID=$(format_uuid "$TELEMETRY_ID")
 
 if [[ -z "$OS_NAME" && -f /etc/os-release ]]; then
-    OS_NAME=$(grep '^PRETTY_NAME=' /etc/os-release | cut -d= -f2 | tr -d '"')
+    OS_NAME=$(grep '^PRETTY_NAME=' /etc/os-release | cut -d= -f2 | tr -d '"' || true)
 fi
 
 if [[ "$OS_NAME" =~ "Fedora" ]]; then
@@ -82,10 +86,20 @@ elif [[ "$MODE" == "done" ]]; then
         [[ -z "$RAM_INFO" ]] && RAM_INFO=$(awk '/MemTotal/ {printf "%.1f GB", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo "Unknown")
         [[ -z "$KERNEL_INFO" ]] && KERNEL_INFO=$(uname -r 2>/dev/null || echo "Unknown")
         [[ -z "$DE_INFO" ]] && DE_INFO=${XDG_CURRENT_DESKTOP:-"TTY / Unknown"}
-        [[ -z "$CPU_INFO" ]] && CPU_INFO=$(grep -m 1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs)
+        if [[ -z "$CPU_INFO" ]]; then
+            if declare -F detect_cpu_info &>/dev/null; then
+                CPU_INFO=$(detect_cpu_info)
+            else
+                CPU_INFO=$(grep -m 1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || true)
+            fi
+        fi
         if [[ -z "$GPU_INFO" ]]; then
-            GPU_RAW=$(lspci -nn 2>/dev/null | grep -iE 'vga|3d|display')
-            GPU_INFO=$(echo "$GPU_RAW" | cut -d: -f3 | sed -E 's/ \(rev [0-9a-f]+\)//g' | xargs)
+            if declare -F detect_gpu_info &>/dev/null; then
+                GPU_INFO=$(detect_gpu_info)
+            else
+                GPU_RAW=$(lspci -nn 2>/dev/null | grep -iE 'vga|3d|display' || true)
+                GPU_INFO=$(echo "$GPU_RAW" | cut -d: -f3 | sed -E 's/ \(rev [0-9a-f]+\)//g' | xargs || true)
+            fi
             [[ -z "$GPU_INFO" ]] && GPU_INFO="Unknown / Virtual Machine"
         fi
 

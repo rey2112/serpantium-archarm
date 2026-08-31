@@ -43,6 +43,7 @@ SUPPORTED_DISTROS=(
     "xerolinux"
     "axyl"
     "omarchy"
+    "archarm"
 )
 
 REQUIRED_PKGS=(
@@ -72,7 +73,7 @@ check_supported_os() {
 
     if [ -f /etc/os-release ]; then
         local DETECTED_OS
-        DETECTED_OS=$(awk -F= '/^ID=/{gsub(/"/, "", $2); print $2}' /etc/os-release)
+        DETECTED_OS=$(awk -F= '/^ID=/{gsub(/"/, "", $2); print $2}' /etc/os-release || true)
 
         for os in "${SUPPORTED_DISTROS[@]}"; do
             if [ "$DETECTED_OS" = "$os" ]; then
@@ -89,6 +90,12 @@ check_supported_os() {
 }
 
 enable_multilib() {
+    # [multilib] carries 32-bit x86 packages and exists only on x86_64.
+    # There is no ARM equivalent, so leave pacman.conf untouched there.
+    if [ "$(uname -m)" != "x86_64" ]; then
+        return 0
+    fi
+
     if [ -f /etc/pacman.conf ]; then
         if grep -q "^#\[multilib\]" /etc/pacman.conf; then
             sudo sed -i '/^#\[multilib\]/{s/^#//;n;s/^#//}' /etc/pacman.conf
@@ -113,10 +120,17 @@ bootstrap_installer_deps() {
     fi
 
     if ! command -v yay &>/dev/null && ! command -v paru &>/dev/null; then
-        local cache_build="${XDG_CACHE_HOME:-"$HOME/.cache"}/serpantinum-yay-bin"
+        # yay-bin ships a prebuilt x86_64 binary and cannot install on ARM.
+        # Build yay from source there instead; makepkg pulls in Go as needed.
+        local aur_helper="yay-bin"
+        if [ "$(uname -m)" != "x86_64" ]; then
+            aur_helper="yay"
+        fi
+
+        local cache_build="${XDG_CACHE_HOME:-"$HOME/.cache"}/serpantinum-${aur_helper}"
         rm -rf "$cache_build"
         mkdir -p "$cache_build"
-        git clone https://aur.archlinux.org/yay-bin.git "$cache_build"
+        git clone "https://aur.archlinux.org/${aur_helper}.git" "$cache_build"
         (cd "$cache_build" && makepkg -si --noconfirm)
         rm -rf "$cache_build"
     fi
